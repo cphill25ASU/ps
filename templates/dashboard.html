@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - PillSync</title>
+
+    <style>
+        /* Demo Day Unified Style */
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #0b1220;
+            background-image: url("/static/background.png");
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 16px;
+            min-height: 100vh;
+            color: #f9fafb;
+        }
+
+        .header {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #f9fafb;
+            margin-bottom: 12px;
+            width: 100%;
+            max-width: 720px;
+        }
+
+        /* NAV ROW */
+        .nav-bar {
+            width: 100%;
+            max-width: 720px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .nav-link {
+            padding: 6px 16px;
+            border-radius: 999px;
+            text-decoration: none;
+            font-size: 0.9rem;
+            background: rgba(15, 23, 42, 0.8);
+            color: #e5e7eb;
+            border: 1px solid rgba(55, 65, 81, 0.8);
+            transition: background 0.15s ease;
+        }
+        .nav-link:hover {
+            background: rgba(31, 41, 55, 0.9);
+        }
+
+        .nav-spacer {
+            margin-left: auto;
+        }
+
+        /* MAIN PANEL */
+        .demo-container {
+            background: rgba(15, 23, 42, 0.90);
+            border-radius: 16px;
+            padding: 28px 32px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+            width: 100%;
+            max-width: 720px;
+        }
+
+        h2 {
+            margin-top: 0;
+            margin-bottom: 6px;
+            font-weight: bold;
+        }
+
+        .subtitle {
+            font-size: 0.9rem;
+            color: #9ca3af;
+            margin-bottom: 24px;
+        }
+
+        /* SECTION HEADER */
+        .section-title {
+            font-size: 1.05rem;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #374151;
+            padding-bottom: 4px;
+        }
+
+        /* MEDICATION LIST */
+        .med-list {
+            list-style: none;
+            padding: 0;
+            margin: 0 0 20px 0;
+        }
+        .med-list li {
+            background: #111827;
+            border: 1px solid #374151;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            border-radius: 12px;
+            font-size: 0.9rem;
+        }
+
+        /* BUTTON ROW */
+        .button-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        button {
+            border: none;
+            border-radius: 999px;
+            padding: 10px 16px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            background: #2563eb;
+            color: #f9fafb;
+            transition: background 0.15s ease, transform 0.05s ease;
+            flex: 1;
+            min-width: 160px;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        button:active {
+            transform: scale(0.97);
+        }
+
+        .btn-green {
+            background: #28A745;
+        }
+        .btn-green:hover {
+            background: #218838;
+        }
+
+        @media (max-width: 500px) {
+            .button-container {
+                flex-direction: column;
+            }
+            button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">PillSync Dashboard</div>
+
+    <!-- Navigation Bar -->
+    <div class="nav-bar">
+        <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+        <a href="{{ url_for('get_users') }}" class="nav-link">Users</a>
+        <a href="{{ url_for('demo') }}" class="nav-link">Demo Day</a>
+        <a href="{{ url_for('logout') }}" class="nav-link nav-spacer">Logout</a>
+    </div>
+
+    <!-- Main Panel -->
+    <div class="demo-container">
+        <h2>Welcome back, <span id="username">{{ user_name }}</span></h2>
+        <div class="subtitle">Here’s what’s coming up next.</div>
+
+        <div class="section-title">Upcoming Medications</div>
+        <ul class="med-list">
+            {% if prescriptions %}
+                {% for prescription in prescriptions %}
+                    <li>{{ prescription.name }} – {{ prescription.dosage }} ({{ prescription.time_of_day }})</li>
+                {% endfor %}
+            {% else %}
+                <li>No upcoming medications</li>
+            {% endif %}
+        </ul>
+
+        <div class="button-container">
+            <a href="/prescriptions"><button>View Prescriptions</button></a>
+            <a href="/prescription_form"><button>Add Prescription</button></a>
+            <button class="btn-green" onclick="dispenseMedication()">Dispense Medication</button>
+        </div>
+    </div>
+
+    <script>
+        function dispenseMedication() {
+            fetch('/dispense', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.success ? "Medication dispensed successfully!" : "Error dispensing medication.");
+            });
+        }
+
+        // Auto logout logic
+        let timeout;
+        function resetTimer() {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => {
+                window.location.href = "/logout";
+            }, 900000);
+        }
+        window.onload = resetTimer;
+        document.onmousemove = resetTimer;
+        document.onkeypress = resetTimer;
+        document.onclick = resetTimer;
+        document.onscroll = resetTimer;
+    </script>
+
+</body>
+</html>
