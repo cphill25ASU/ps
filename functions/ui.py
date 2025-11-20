@@ -206,7 +206,7 @@ class DispenserApp(App):
 
         bottom_row = BoxLayout(size_hint=(1, 0.15), spacing=dp(10))
 
-        manual_btn = RoundedButton(text="DISPENSE", font_size=sp(22), on_press=self.manual_dispense)
+        manual_btn = RoundedButton(text="DISPENSE", font_size=sp(22), on_release=self.manual_dispense)
 
         self.alert_label = Label(text=self.alert_text, font_size=sp(18), halign="center", valign="middle")
         self.alert_label.bind(size=lambda instance, value: setattr(instance, 'text_size', value))
@@ -215,8 +215,9 @@ class DispenserApp(App):
         self.update_alert_color()
 
         details_btn = RoundedButton(text="DETAILS", font_size=sp(22))
-        details_btn.bind(on_touch_down=self._details_touch_down)
-        details_btn.bind(on_touch_up=self._details_touch_up)
+        # details_btn.bind(on_touch_down=self._details_touch_down)
+        # details_btn.bind(on_touch_up=self._details_touch_up)
+        details_btn.bind(on_release=self.show_details)
 
         bottom_row.add_widget(manual_btn)
         bottom_row.add_widget(self.alert_label)
@@ -269,7 +270,6 @@ class DispenserApp(App):
                       separator_color=(0, 0, 0, 0), background_color=(0, 0, 0, 0))
         success_btn.bind(on_press=lambda x: self._handle_dispense_success(popup))
         failure_btn.bind(on_press=lambda x: self._handle_dispense_failure(popup))
-        Clock.schedule_once(lambda dt: popup.open(), 0)
 
     def _handle_dispense_success(self, popup):
         self.alert_text = "Dose Dispensed"
@@ -329,9 +329,9 @@ class DispenserApp(App):
 
     def show_details(self, instance):
 
-        if self.dev_menu_event:
-            self.dev_menu_event.cancel()
-            self.dev_menu_event = None
+        # if self.dev_menu_event:
+        #     self.dev_menu_event.cancel()
+        #     self.dev_menu_event = None
 
         content = RoundedBoxLayout(orientation='vertical', spacing=dp(10), padding=dp(20))
         title_label = Label(text=f"{self.current_user}'s Schedule", font_size=sp(24), bold=True, size_hint_y=None, height=dp(40))
@@ -365,69 +365,69 @@ class DispenserApp(App):
         close_button.bind(on_press=popup.dismiss)
         popup.open()
 
-    def _details_touch_down(self, instance, touch):
-        if instance.collide_point(*touch.pos):
-            self.dev_menu_event = Clock.schedule_once(self.show_dev_menu, 10)
+    # def _details_touch_down(self, instance, touch):
+    #     if instance.collide_point(*touch.pos):
+    #         self.dev_menu_event = Clock.schedule_once(self.show_dev_menu, 10)
 
-    def _details_touch_up(self, instance, touch):
-        if instance.collide_point(*touch.pos):
-            if self.dev_menu_event:
-                self.dev_menu_event.cancel()
-                self.dev_menu_event = None
-                self.show_details(instance)
+    # def _details_touch_up(self, instance, touch):
+    #     if instance.collide_point(*touch.pos):
+    #         if self.dev_menu_event:
+    #             self.dev_menu_event.cancel()
+    #             self.dev_menu_event = None
+    #             self.show_details(instance)
 
-    def show_dev_menu(self, dt):
-        self.dev_menu_event = None
+    # def show_dev_menu(self, dt):
+    #     self.dev_menu_event = None
 
-        content = RoundedBoxLayout(orientation='vertical', spacing=dp(10), padding=dp(20))
-        title_label = Label(text="Developer Menu", font_size=sp(24), bold=True, size_hint_y=None, height=dp(40))
+    #     content = RoundedBoxLayout(orientation='vertical', spacing=dp(10), padding=dp(20))
+    #     title_label = Label(text="Developer Menu", font_size=sp(24), bold=True, size_hint_y=None, height=dp(40))
 
-        time_layout = BoxLayout(size_hint_y=None, height=dp(50))
-        hour_spinner = Spinner(text=self.get_time().split(":")[0], values=[str(i) for i in range(1, 13)])
-        min_spinner = Spinner(text=self.get_time().split(":")[1].split()[0], values=[f"{i:02}" for i in range(60)])
-        period_spinner = Spinner(text=self.get_time().split()[1], values=["AM", "PM"])
-        time_layout.add_widget(hour_spinner)
-        time_layout.add_widget(Label(text=":"))
-        time_layout.add_widget(min_spinner)
-        time_layout.add_widget(period_spinner)
+    #     time_layout = BoxLayout(size_hint_y=None, height=dp(50))
+    #     hour_spinner = Spinner(text=self.get_time().split(":")[0], values=[str(i) for i in range(1, 13)])
+    #     min_spinner = Spinner(text=self.get_time().split(":")[1].split()[0], values=[f"{i:02}" for i in range(60)])
+    #     period_spinner = Spinner(text=self.get_time().split()[1], values=["AM", "PM"])
+    #     time_layout.add_widget(hour_spinner)
+    #     time_layout.add_widget(Label(text=":"))
+    #     time_layout.add_widget(min_spinner)
+    #     time_layout.add_widget(period_spinner)
 
-        set_time_btn = RoundedButton(text="Set Time", size_hint_y=None, height=dp(50))
-        reset_time_btn = RoundedButton(text="Reset to Real Time", size_hint_y=None, height=dp(50))
-        close_btn = RoundedButton(text="Close", size_hint_y=None, height=dp(50))
+    #     set_time_btn = RoundedButton(text="Set Time", size_hint_y=None, height=dp(50))
+    #     reset_time_btn = RoundedButton(text="Reset to Real Time", size_hint_y=None, height=dp(50))
+    #     close_btn = RoundedButton(text="Close", size_hint_y=None, height=dp(50))
 
-        content.add_widget(title_label)
-        content.add_widget(time_layout)
-        content.add_widget(set_time_btn)
-        content.add_widget(reset_time_btn)
-        content.add_widget(close_btn)
+    #     content.add_widget(title_label)
+    #     content.add_widget(time_layout)
+    #     content.add_widget(set_time_btn)
+    #     content.add_widget(reset_time_btn)
+    #     content.add_widget(close_btn)
 
-        popup = Popup(title='Dev Menu', content=content, size_hint=(0.9, 0.9),
-                      separator_color=(0, 0, 0, 0), background_color=(0, 0, 0, 0))
+    #     popup = Popup(title='Dev Menu', content=content, size_hint=(0.9, 0.9),
+    #                   separator_color=(0, 0, 0, 0), background_color=(0, 0, 0, 0))
 
-        set_time_btn.bind(on_press=lambda x: self._set_manual_time(
-            popup, hour_spinner.text, min_spinner.text, period_spinner.text))
-        reset_time_btn.bind(on_press=lambda x: self._reset_to_real_time(popup))
-        close_btn.bind(on_press=popup.dismiss)
-        popup.open()
+    #     set_time_btn.bind(on_press=lambda x: self._set_manual_time(
+    #         popup, hour_spinner.text, min_spinner.text, period_spinner.text))
+    #     reset_time_btn.bind(on_press=lambda x: self._reset_to_real_time(popup))
+    #     close_btn.bind(on_press=popup.dismiss)
+    #     popup.open()
 
-    def _set_manual_time(self, popup, hour, minute, period):
-        try:
-            target_time_str = f"{hour}:{minute} {period}"
-            today_str = time.strftime("%Y-%m-%d")
-            full_time_str = f"{today_str} {target_time_str}"
-            target_timestamp = time.mktime(time.strptime(full_time_str, "%Y-%m-%d %I:%M %p"))
-            self.manual_offset = target_timestamp - time.time()
-            self.manual_clock_enabled = True
-            print(f"Clock overridden. New time: {self.get_time()}")
-            popup.dismiss()
-        except Exception as e:
-            print(f"Error setting manual time: {e}")
+    # def _set_manual_time(self, popup, hour, minute, period):
+    #     try:
+    #         target_time_str = f"{hour}:{minute} {period}"
+    #         today_str = time.strftime("%Y-%m-%d")
+    #         full_time_str = f"{today_str} {target_time_str}"
+    #         target_timestamp = time.mktime(time.strptime(full_time_str, "%Y-%m-%d %I:%M %p"))
+    #         self.manual_offset = target_timestamp - time.time()
+    #         self.manual_clock_enabled = True
+    #         print(f"Clock overridden. New time: {self.get_time()}")
+    #         popup.dismiss()
+    #     except Exception as e:
+    #         print(f"Error setting manual time: {e}")
 
-    def _reset_to_real_time(self, popup):
-        self.manual_clock_enabled = False
-        self.manual_offset = 0
-        print("Clock reset to real time.")
-        popup.dismiss()
+    # def _reset_to_real_time(self, popup):
+    #     self.manual_clock_enabled = False
+    #     self.manual_offset = 0
+    #     print("Clock reset to real time.")
+    #     popup.dismiss()
 
     def switch_user(self, *args):
         if not self.all_users:
