@@ -269,7 +269,7 @@ class DispenserApp(App):
                       separator_color=(0, 0, 0, 0), background_color=(0, 0, 0, 0))
         success_btn.bind(on_press=lambda x: self._handle_dispense_success(popup))
         failure_btn.bind(on_press=lambda x: self._handle_dispense_failure(popup))
-        popup.open()
+        Clock.schedule_once(lambda dt: popup.open(), 0)
 
     def _handle_dispense_success(self, popup):
         self.alert_text = "Dose Dispensed"
@@ -328,6 +328,11 @@ class DispenserApp(App):
             self.alert_color = 1
 
     def show_details(self, instance):
+
+        if self.dev_menu_event:
+            self.dev_menu_event.cancel()
+            self.dev_menu_event = None
+
         content = RoundedBoxLayout(orientation='vertical', spacing=dp(10), padding=dp(20))
         title_label = Label(text=f"{self.current_user}'s Schedule", font_size=sp(24), bold=True, size_hint_y=None, height=dp(40))
 
