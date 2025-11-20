@@ -1,0 +1,254 @@
+#!/usr/bin/env python3
+"""
+Motor Array Controller for PillSyncOS
+Controls 28BYJ-48 stepper motors using one or two MCP23017 expanders.
+
+Auto-detects which expanders are present:
+ - Board 1 → I2C addr 0x20
+ - Board 2 → I2C addr 0x21 (only used if physically present)
+
+Each motor uses one nibble (4 bits):
+  GPA0–3, GPA4–7, GPB0–3 per board.
+
+Each dispense call:
+ • Rotates exactly 320 "whole steps"
+ • One whole step = 2 half-steps
+ • Limit of 7 calls per motor (reset after homing)
+"""
+
+import time
+import sys
+
+SMBUS_AVAILABLE = True
+
+try:
+    from smbus2 import SMBus
+except Exception:
+    # Likely on Windows: smbus2 needs fcntl/Linux
+    SMBUS_AVAILABLE = False
+
+    class SMBus:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("SMBus is not available on this platform (Windows).")
+
+
+# MCP23017 registers
+IODIRA = 0x00
+IODIRB = 0x01
+OLATA  = 0x14
+OLATB  = 0x15
+
+# Two expanders (board 2 optional)
+ADDR_BOARD1 = 0x20
+ADDR_BOARD2 = 0x21
+
+# Half-step sequence from your working test script
+SEQ = [
+    0b0001, 0b0011, 0b0010, 0b0110,
+    0b0100, 0b1100, 0b1000, 0b1001
+]
+
+# Master motor map template (we filter this after I2C detection)
+MOTOR_MAP_TEMPLATE = {
+    1: {"addr": ADDR_BOARD1, "port": "A", "shift": 0},
+    2: {"addr": ADDR_BOARD1, "port": "A", "shift": 4},
+    3: {"addr": ADDR_BOARD1, "port": "B", "shift": 0},
+    4: {"addr": ADDR_BOARD2, "port": "A", "shift": 0},
+    5: {"addr": ADDR_BOARD2, "port": "A", "shift": 4},
+    6: {"addr": ADDR_BOARD2, "port": "B", "shift": 0},
+}
+
+# Step definitions
+HALFSTEPS_PER_WHOLESTEP = 2
+WHOLESTEPS_PER_CALL = 320
+MAX_CALLS_PER_MOTOR = 7
+
+
+class MotorLimitReached(Exception):
+    """Raised when a motor exceeds its allowed call count."""
+    pass
+
+
+if SMBUS_AVAILABLE:
+    # ================================
+    # REAL IMPLEMENTATION (Pi / Linux)
+    # ================================
+    class MotorArray:
+        def __init__(self, bus_num: int = 1):
+            self.bus = SMBus(bus_num)
+
+            # 1) Detect which expanders exist
+            self._detect_expanders()
+
+            # 2) Build filtered motor map
+            self.motor_map = {
+                mid: cfg for mid, cfg in MOTOR_MAP_TEMPLATE.items()
+                if cfg["addr"] in self.detected_addrs
+            }
+
+            # 3) Initialize call counters ONLY for detected motors
+            self.call_counts = {mid: 0 for mid in self.motor_map}
+
+            # 4) Initialize detected expanders
+            self._init_expanders()
+
+            print(f"[MotorArray] Detected expanders: {self.detected_addrs}")
+            print(f"[MotorArray] Active motors: {list(self.motor_map.keys())}")
+
+        # -------------------------
+        # Expander detection
+        # -------------------------
+        def _detect_expanders(self):
+            """Detect which MCP23017 expanders are physically present."""
+            self.detected_addrs = []
+            for addr in [ADDR_BOARD1, ADDR_BOARD2]:
+                try:
+                    self.bus.write_byte(addr, 0x00)  # probe
+                    self.detected_addrs.append(addr)
+                except Exception:
+                    pass
+
+        # -------------------------
+        # Expander setup
+        # -------------------------
+        def _init_expanders(self):
+            """Initialize only detected expanders."""
+            for addr in self.detected_addrs:
+                self.bus.write_byte_data(addr, IODIRA, 0x00)
+                self.bus.write_byte_data(addr, IODIRB, 0x00)
+                self.bus.write_byte_data(addr, OLATA, 0x00)
+                self.bus.write_byte_data(addr, OLATB, 0x00)
+
+        # -------------------------
+        # Low-level helpers
+        # -------------------------
+        def _write_port(self, addr, port, value):
+            reg = OLATA if port == "A" else OLATB
+            self.bus.write_byte_data(addr, reg, value & 0xFF)
+
+        def _write_coils_motor(self, motor_id, pattern):
+            cfg = self.motor_map[motor_id]
+            addr = cfg["addr"]
+            port = cfg["port"]
+            shift = cfg["shift"]
+
+            # Place the 4-bit pattern into the correct nibble
+            nibble_val = (pattern & 0x0F) << shift
+
+            # Write to MCP23017
+            self._write_port(addr, port, nibble_val)
+
+        def _coils_off_motor(self, motor_id):
+            self._write_coils_motor(motor_id, 0x0)
+
+        # -------------------------
+        # Public API
+        # -------------------------
+        def remaining_calls(self, motor_id):
+            return MAX_CALLS_PER_MOTOR - self.call_counts[motor_id]
+
+        def reset_call_count(self, motor_id):
+            self.call_counts[motor_id] = 0
+
+        def reset_all_call_counts(self):
+            for mid in self.call_counts:
+                self.call_counts[mid] = 0
+
+        def step_motor(
+            self,
+            motor_id: int,
+            direction: int = 1,
+            whole_steps: int = WHOLESTEPS_PER_CALL,
+            delay: float = 0.003,
+            enforce_limits: bool = True,
+        ):
+            if motor_id not in self.motor_map:
+                raise ValueError(f"Motor {motor_id} not available on detected hardware")
+
+            if enforce_limits and self.call_counts[motor_id] >= MAX_CALLS_PER_MOTOR:
+                raise MotorLimitReached(
+                    f"Motor {motor_id} has reached max {MAX_CALLS_PER_MOTOR} calls."
+                )
+
+            total_halfsteps = whole_steps * HALFSTEPS_PER_WHOLESTEP
+            idx = 0 if direction >= 0 else len(SEQ) - 1
+
+            try:
+                for _ in range(total_halfsteps):
+                    pattern = SEQ[idx]
+                    self._write_coils_motor(motor_id, pattern)
+                    time.sleep(delay)
+                    idx = (idx + 1) % len(SEQ) if direction >= 0 else (idx - 1) % len(SEQ)
+
+            finally:
+                self._coils_off_motor(motor_id)
+
+            if enforce_limits:
+                self.call_counts[motor_id] += 1
+
+        def coils_off_all(self):
+            for addr in self.detected_addrs:
+                self.bus.write_byte_data(addr, OLATA, 0x00)
+                self.bus.write_byte_data(addr, OLATB, 0x00)
+
+        def close(self):
+            self.coils_off_all()
+            self.bus.close()
+
+else:
+    # ================================
+    # MOCK IMPLEMENTATION (Windows)
+    # ================================
+    class MotorArray:
+        """
+        Mock MotorArray used on platforms without SMBus/smbus2 (e.g. Windows).
+
+        Lets the rest of the app import and run, but does NOT touch hardware.
+        """
+
+        def __init__(self, bus_num: int = 1):
+            print(
+                "[MotorArray] WARNING: SMBus not available on this platform. "
+                "Using mock MotorArray (no hardware control)."
+            )
+            self.detected_addrs = []
+            self.motor_map = {}
+            self.call_counts = {}
+
+        def remaining_calls(self, motor_id):
+            # Pretend we always have room
+            return MAX_CALLS_PER_MOTOR
+
+        def reset_call_count(self, motor_id):
+            pass
+
+        def reset_all_call_counts(self):
+            pass
+
+        def step_motor(
+            self,
+            motor_id: int,
+            direction: int = 1,
+            whole_steps: int = WHOLESTEPS_PER_CALL,
+            delay: float = 0.003,
+            enforce_limits: bool = True,
+        ):
+            print(
+                f"[MotorArray MOCK] step_motor(motor_id={motor_id}, "
+                f"direction={direction}, whole_steps={whole_steps}) → NO-OP on Windows."
+            )
+
+        def coils_off_all(self):
+            pass
+
+        def close(self):
+            pass
+
+
+if __name__ == "__main__":
+    ma = MotorArray()
+    try:
+        print("Testing motor 1 → 320 steps CW")
+        ma.step_motor(1)
+    finally:
+        ma.close()
