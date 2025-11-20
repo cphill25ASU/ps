@@ -362,7 +362,7 @@ class DispenserApp(App):
 
     def _details_touch_down(self, instance, touch):
         if instance.collide_point(*touch.pos):
-            self.dev_menu_event = Clock.schedule_once(self.show_dev_menu, 2)
+            self.dev_menu_event = Clock.schedule_once(self.show_dev_menu, 10)
 
     def _details_touch_up(self, instance, touch):
         if instance.collide_point(*touch.pos):
