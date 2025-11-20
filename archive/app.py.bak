@@ -1,0 +1,208 @@
+from flask import Flask, render_template, request, redirect, url_for, session, g
+import json
+import os
+import hashlib
+import time
+import sqlite3
+import subprocess
+
+app = Flask(__name__)
+app.secret_key = "your_secret_key"
+SESSION_TIMEOUT = 900 #auto logout after 15 minutes inactivity
+
+# External database for user/meds data
+DATABASE = "data/pillsync.db"
+
+# Temporary storage instead of a database
+CREDENTIALS_FILE = "data/credentials.json"
+
+# Ensure data directory exists
+os.makedirs("data", exist_ok=True)
+
+# 🔹 Database Connection Function
+def get_db():
+    db = getattr(g, "_database", None)
+    if db is None:
+        db = g._database = sqlite3.connect(DATABASE)
+        db.row_factory = sqlite3.Row  # Allows dictionary-like access to rows
+    return db
+
+def hash_password(password):
+    """Hash a password using MD5 to match the stored format."""
+    return hashlib.md5(password.encode()).hexdigest()
+
+def load_credentials():
+    """Load username and hashed password from the JSON file."""
+    if os.path.exists(CREDENTIALS_FILE):
+        with open(CREDENTIALS_FILE, "r") as file:
+            return json.load(file)
+    return {"username": "admin", "password": hash_password("password")}  # Default login
+
+def save_credentials(username, password):
+    """Save new credentials to JSON file."""
+    with open(CREDENTIALS_FILE, "w") as file:
+        json.dump({"username": username, "password": hash_password(password)}, file)
+
+@app.before_request
+def check_session_timeout():
+    """Check if the session has expired due to inactivity."""
+    if "user" in session:
+        last_active = session.get("last_active", time.time())
+        if time.time() - last_active > SESSION_TIMEOUT:
+            session.pop("user", None)  # Logout the user
+            return redirect(url_for("login"))
+        session["last_active"] = time.time()  # Update activity timestamp
+
+@app.teardown_appcontext
+def close_connection(exception):
+    db = getattr(g, "_database", None)
+    if db is not None:
+        db.close()
+
+@app.route("/", methods=["GET", "POST"])
+def login():
+    credentials = load_credentials()
+    
+    if "user" in session:
+        return redirect(url_for("dashboard"))
+
+    if request.method == "POST":
+        username = request.form.get("username")
+        password = request.form.get("password")
+        hashed_input_password = hash_password(password)
+
+        print(f"DEBUG: Entered Username: {username}")
+        print(f"DEBUG: Entered Password (hashed): {hashed_input_password}")
+        print(f"DEBUG: Stored Username: {credentials['username']}")
+        print(f"DEBUG: Stored Password: {credentials['password']}")
+
+        if username == credentials["username"] and hashed_input_password == credentials["password"]:
+            print("DEBUG: Login successful!")
+            session["user"] = username
+            
+            # **Redirect to password update page if default credentials are still used**
+            if username == "admin" and hashed_input_password == hash_password("password"):
+                print("DEBUG: Default credentials detected, redirecting to update page.")
+                return redirect(url_for("update_credentials"))
+            
+            return redirect(url_for("dashboard"))
+        else:
+            print("DEBUG: Invalid login attempt")
+            return "Invalid credentials", 401
+
+    return render_template("login.html")
+
+
+
+@app.route("/update_credentials", methods=["GET", "POST"])
+def update_credentials():
+    """Force the user to update credentials if using default login."""
+    if "user" not in session:
+        return redirect(url_for("login"))
+
+    if request.method == "POST":
+        new_username = request.form.get("username")
+        new_password = request.form.get("password")
+
+        # Update stored credentials
+        save_credentials(new_username, new_password)
+
+        session["user"] = new_username  # Keep user logged in
+        print("DEBUG: Credentials updated successfully!")
+
+        return redirect(url_for("dashboard"))
+
+    return render_template("update_credentials.html")
+
+@app.route("/logout")
+def logout():
+    """Manually log out the user."""
+    session.pop("user", None)
+    return redirect(url_for("login"))
+
+@app.route("/dashboard")
+def dashboard():
+    if "user" not in session:
+        return redirect(url_for("login"))
+    
+    db = get_db()
+    user = db.execute("SELECT name FROM users WHERE user_id = ?", (session["user"],)).fetchone()
+    
+    prescriptions = db.execute("SELECT name, dosage, time_of_day FROM prescriptions WHERE status='Active'").fetchall()
+    
+    return render_template("dashboard.html", user_name=user["name"] if user else "User", prescriptions=prescriptions)
+
+@app.route("/dispense", methods=["POST"])
+def dispense():
+    if "user" not in session:
+        return {"success": False, "error": "Unauthorized"}, 401
+
+    try:
+        result = subprocess.run(["python3", "functions/servermotor_sim.py"], check=True, capture_output=True, text=True)
+        print("DEBUG: Dispense Output ->", result.stdout)  # Log output
+        return {"success": True, "message": result.stdout.strip()}
+    except subprocess.CalledProcessError as e:
+        print("ERROR: Dispense failed ->", e.stderr)  # Log error
+        return {"success": False, "error": "Failed to dispense"}
+
+@app.route("/users")
+def get_users():
+    db = get_db()
+    cursor = db.execute("SELECT * FROM users")
+    users = cursor.fetchall()
+    return render_template("users.html", users=users)
+
+@app.route("/prescriptions")
+def get_prescriptions():
+    db = get_db()
+    cursor = db.execute("SELECT * FROM prescriptions")
+    prescriptions = cursor.fetchall()
+    return render_template("prescriptions.html", prescriptions=prescriptions)
+
+@app.route("/delete_prescription/<int:prescription_id>", methods=["POST"])
+def delete_prescription(prescription_id):
+    if "user" not in session:
+        return redirect(url_for("login"))
+
+    db = get_db()
+    db.execute("DELETE FROM prescriptions WHERE prescription_id = ?", (prescription_id,))
+    db.commit()
+    
+    return {"success": True}
+
+
+@app.route("/prescription_form")
+def prescription_form():
+    """Render the prescription entry form."""
+    return render_template("prescription_form.html")
+
+@app.route("/add_prescription", methods=["POST"])
+def add_prescription():
+    """Handle form submission and add prescription to database."""
+    db = get_db()
+    user_id = 1  # Placeholder for now (future: assign dynamically)
+    name = request.form["name"]
+    amount = request.form["amount"]
+    frequency = request.form["frequency"]
+    refill_date = request.form["refill_date"]
+    dosage = request.form.get("dosage", "")
+    time_of_day = request.form.get("time_of_day", "")
+
+    db.execute("""
+        INSERT INTO prescriptions (user_id, name, amount, frequency, refill_date, dosage, time_of_day, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'Active')
+    """, (user_id, name, amount, frequency, refill_date, dosage, time_of_day))
+    db.commit()
+
+    return redirect(url_for("get_prescriptions"))  # Redirect to see all prescriptions
+
+
+
+@app.route("/logout_all")
+def force_logout():
+    session.clear()  # Logs out all users
+    return redirect(url_for("login"))
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
