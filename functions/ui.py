@@ -1,7 +1,7 @@
-from kivy.config import Config
-from kivy.app import App
-Config.set('graphics', 'fullscreen', 'auto')  # or '1' instead of 'auto'
-Config.set('graphics', 'borderless', '1')
+# from kivy.config import Config
+# from kivy.app import App
+# Config.set('graphics', 'fullscreen', 'auto')  # or '1' instead of 'auto'
+# Config.set('graphics', 'borderless', '1')
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 from kivy.uix.button import Button
@@ -25,7 +25,7 @@ import requests
 # Override with: PILLSYNC_SERVER="http://192.168.1.109:5000"
 SERVER = os.environ.get("PILLSYNC_SERVER", "http://127.0.0.1:5000")
 
-#Window.size = (480, 320)
+Window.size = (800, 480)
 Window.clearcolor = (0, 0, 0, 1)
 
 class RoundedButton(Button):
