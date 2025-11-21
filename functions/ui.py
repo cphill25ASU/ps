@@ -1,4 +1,5 @@
 from kivy.config import Config
+from kivy.app import App
 Config.set('graphics', 'fullscreen', 'auto')
 Config.set('graphics', 'borderless', '1')
 from kivy.uix.boxlayout import BoxLayout
