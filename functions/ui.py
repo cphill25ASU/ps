@@ -97,7 +97,7 @@ class DispenserApp(App):
     def build(self):
         self.root = self.create_main_ui()
         self._load_data_from_server()
-        Clock.schedule_interval(self._load_data_from_server, 5)
+        Clock.schedule_interval(self._load_data_from_server, 30)
         Clock.schedule_interval(self._check_server_for_alerts, 5)
         Clock.schedule_interval(self.update_clock, 1)
         return self.root
