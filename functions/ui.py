@@ -83,6 +83,8 @@ class DispenserApp(App):
     dev_menu_event = None
     alert_active = BooleanProperty(False)
     _alert_check_paused = False
+    details_pressed = False
+    details_long_press = False
 
     all_users = ListProperty([])
     all_prescriptions = ListProperty([])
@@ -365,14 +367,54 @@ class DispenserApp(App):
 
     def _details_touch_down(self, instance, touch):
         if instance.collide_point(*touch.pos):
-            self.dev_menu_event = Clock.schedule_once(self.show_dev_menu, 10)
+            # Mark that the button is being held
+            self.details_pressed = True
+            self.details_long_press = False
 
-    def _details_touch_up(self, instance, touch):
-        if instance.collide_point(*touch.pos):
+            # Cancel any old timer just in case
             if self.dev_menu_event:
                 self.dev_menu_event.cancel()
-                self.dev_menu_event = None
-                self.show_details(instance)
+
+            # Schedule a check in 2 seconds
+            self.dev_menu_event = Clock.schedule_once(self._maybe_show_dev_menu, 2)
+            return True  # consume the touch
+        return False
+
+
+    def _details_touch_up(self, instance, touch):
+        # If we never marked it as pressed, ignore
+        if not self.details_pressed:
+            return False
+
+        # Finger is up now
+        self.details_pressed = False
+
+        # If a long press already triggered, don't open details
+        if self.details_long_press:
+            return True
+
+        # Cancel the long-press timer if it hasn't fired yet
+        if self.dev_menu_event:
+            self.dev_menu_event.cancel()
+            self.dev_menu_event = None
+
+        # Short tap: only open details if we released on the button
+        if instance.collide_point(*touch.pos):
+            self.show_details(instance)
+            return True
+
+        return False
+
+
+    def _maybe_show_dev_menu(self, dt):
+        # Timer fired after 2 seconds
+        self.dev_menu_event = None
+
+        # Only open dev menu if the button is STILL being held down
+        if self.details_pressed:
+            self.details_long_press = True
+            self.show_dev_menu(dt)
+
 
     def show_dev_menu(self, dt):
         self.dev_menu_event = None
