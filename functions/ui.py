@@ -470,8 +470,6 @@ class DispenserApp(App):
         print("Clock reset to real time.")
         popup.dismiss()
 
-    # In ui.py
-
     def switch_user(self, *args):
         if not self.all_users:
             return
@@ -479,10 +477,11 @@ class DispenserApp(App):
         # 1. Update the index
         self.current_user_index = (self.current_user_index + 1) % len(self.all_users)
 
-        # 2. Update the ID to reflect the new user
+        # 2. Update the current_user_id to reflect the new user
         current_user_data = self.all_users[self.current_user_index]
         self.current_user_id = current_user_data.get("user_id")
         
+        # 3. Apply the changes immediately
         self._filter_and_sort_prescriptions()
         print(f"Switched to user: {self.current_user}")
 
@@ -493,12 +492,13 @@ class DispenserApp(App):
     #     self._filter_and_sort_prescriptions()
     #     print(f"Switched to user: {self.current_user}")
 
-
-    def _filter_and_sort_prescriptions(self):
+        def _filter_and_sort_prescriptions(self):
         if not self.all_users:
             if self.connection_status:
+                # Server reachable, but no users in DB
                 self.current_user = "No Users"
             else:
+                # Truly offline / server error
                 self.current_user = "Offline"
 
             self.current_schedule = []
@@ -506,30 +506,30 @@ class DispenserApp(App):
             self.next_dose_text = "No Doses Scheduled"
             return
 
-        # --- MODIFICATION START ---
-        # 1. Store the previous user ID (if one was selected)
-        previous_user_id = self.current_user_id
-
-        # 2. Try to find the index of the previously selected user
+        # --- FIX: Preserve selected user across periodic data refreshes ---
+        target_user_id = self.current_user_id
         new_index = 0
-        if previous_user_id is not None:
+        
+        # 1. If a user ID was previously selected (i.e., not None or 0), try to find its index
+        # This prevents the periodic refresh from reverting the index to 0.
+        if target_user_id is not None and target_user_id != 0:
             for i, user in enumerate(self.all_users):
-                if user.get("user_id") == previous_user_id:
+                # Search for the user with the matching ID
+                if user.get("user_id") == target_user_id:
                     new_index = i
                     break
-
-        # 3. Use the found index (or 0 if not found)
+        
+        # 2. Set the index to the preserved index (or 0 if the target ID wasn't found/set)
         self.current_user_index = new_index
-        # --- MODIFICATION END ---
+        # -----------------------------------------------------------------
 
-        # Get the current user based on the (potentially new) index
+        # Get the current user based on the (now stable) index
         current_user_data = self.all_users[self.current_user_index]
         self.current_user = current_user_data.get("name", "Unknown User")
         current_user_id = current_user_data.get("user_id")
-        
-        # --- NEW: Store the current user's ID ---
-        self.current_user_id = current_user_id 
-        # ---------------------------------------
+
+        # Ensure the current_user_id property is set/updated for the next refresh cycle
+        self.current_user_id = current_user_id
 
         # Filter all prescriptions for the current user
         user_prescriptions = [p for p in self.all_prescriptions if p['user_id'] == current_user_id]
@@ -547,7 +547,7 @@ class DispenserApp(App):
         self.full_schedule = active_details + dispensed_details
 
         self.next_dose_index = 0
-        self._update_next_dose_display()  
+        self._update_next_dose_display()
 
     # def _filter_and_sort_prescriptions(self):
     #     if not self.all_users:
