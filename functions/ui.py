@@ -73,6 +73,7 @@ class StatusIndicator(Widget):
 # Main application class for the pillsync
 class DispenserApp(App):
     current_user = StringProperty("Loading...")
+    current_user_id = NumericProperty(None)
     clock_time = StringProperty("")
     next_dose_text = StringProperty("")
     alert_text = StringProperty("")
@@ -97,7 +98,7 @@ class DispenserApp(App):
     def build(self):
         self.root = self.create_main_ui()
         self._load_data_from_server()
-        Clock.schedule_interval(self._load_data_from_server, 30)
+        Clock.schedule_interval(self._load_data_from_server, 5)
         Clock.schedule_interval(self._check_server_for_alerts, 5)
         Clock.schedule_interval(self.update_clock, 1)
         return self.root
@@ -469,20 +470,35 @@ class DispenserApp(App):
         print("Clock reset to real time.")
         popup.dismiss()
 
+    # In ui.py
+
     def switch_user(self, *args):
         if not self.all_users:
             return
+
+        # 1. Update the index
         self.current_user_index = (self.current_user_index + 1) % len(self.all_users)
+
+        # 2. Update the ID to reflect the new user
+        current_user_data = self.all_users[self.current_user_index]
+        self.current_user_id = current_user_data.get("user_id")
+        
         self._filter_and_sort_prescriptions()
         print(f"Switched to user: {self.current_user}")
+
+    # def switch_user(self, *args):
+    #     if not self.all_users:
+    #         return
+    #     self.current_user_index = (self.current_user_index + 1) % len(self.all_users)
+    #     self._filter_and_sort_prescriptions()
+    #     print(f"Switched to user: {self.current_user}")
+
 
     def _filter_and_sort_prescriptions(self):
         if not self.all_users:
             if self.connection_status:
-                # Server reachable, but no users in DB
                 self.current_user = "No Users"
             else:
-                # Truly offline / server error
                 self.current_user = "Offline"
 
             self.current_schedule = []
@@ -490,10 +506,30 @@ class DispenserApp(App):
             self.next_dose_text = "No Doses Scheduled"
             return
 
-        # Get the current user based on the index
+        # --- MODIFICATION START ---
+        # 1. Store the previous user ID (if one was selected)
+        previous_user_id = self.current_user_id
+
+        # 2. Try to find the index of the previously selected user
+        new_index = 0
+        if previous_user_id is not None:
+            for i, user in enumerate(self.all_users):
+                if user.get("user_id") == previous_user_id:
+                    new_index = i
+                    break
+
+        # 3. Use the found index (or 0 if not found)
+        self.current_user_index = new_index
+        # --- MODIFICATION END ---
+
+        # Get the current user based on the (potentially new) index
         current_user_data = self.all_users[self.current_user_index]
         self.current_user = current_user_data.get("name", "Unknown User")
         current_user_id = current_user_data.get("user_id")
+        
+        # --- NEW: Store the current user's ID ---
+        self.current_user_id = current_user_id 
+        # ---------------------------------------
 
         # Filter all prescriptions for the current user
         user_prescriptions = [p for p in self.all_prescriptions if p['user_id'] == current_user_id]
@@ -511,7 +547,44 @@ class DispenserApp(App):
         self.full_schedule = active_details + dispensed_details
 
         self.next_dose_index = 0
-        self._update_next_dose_display()
+        self._update_next_dose_display()  
+
+    # def _filter_and_sort_prescriptions(self):
+    #     if not self.all_users:
+    #         if self.connection_status:
+    #             # Server reachable, but no users in DB
+    #             self.current_user = "No Users"
+    #         else:
+    #             # Truly offline / server error
+    #             self.current_user = "Offline"
+
+    #         self.current_schedule = []
+    #         self.full_schedule = []
+    #         self.next_dose_text = "No Doses Scheduled"
+    #         return
+
+    #     # Get the current user based on the index
+    #     current_user_data = self.all_users[self.current_user_index]
+    #     self.current_user = current_user_data.get("name", "Unknown User")
+    #     current_user_id = current_user_data.get("user_id")
+
+    #     # Filter all prescriptions for the current user
+    #     user_prescriptions = [p for p in self.all_prescriptions if p['user_id'] == current_user_id]
+
+    #     # Sort active schedule for the main UI
+    #     active_schedule = [p for p in user_prescriptions if p['status'] == 'Active']
+    #     active_schedule.sort(key=lambda p: self.parse_time(self.format_time_for_display(p['time_of_day'])) or 0)
+    #     self.current_schedule = active_schedule
+
+    #     # Sort full schedule for the details view
+    #     active_details = [p for p in user_prescriptions if p['status'] == 'Active']
+    #     dispensed_details = [p for p in user_prescriptions if p['status'] == 'Dispensed']
+    #     active_details.sort(key=lambda p: self.parse_time(self.format_time_for_display(p['time_of_day'])) or 0)
+    #     dispensed_details.sort(key=lambda p: self.parse_time(self.format_time_for_display(p['time_of_day'])) or 0, reverse=True)
+    #     self.full_schedule = active_details + dispensed_details
+
+    #     self.next_dose_index = 0
+    #     self._update_next_dose_display()
 
     # def _filter_and_sort_prescriptions(self):
     #     if not self.all_users:
