@@ -492,7 +492,7 @@ class DispenserApp(App):
     #     self._filter_and_sort_prescriptions()
     #     print(f"Switched to user: {self.current_user}")
 
-        def _filter_and_sort_prescriptions(self):
+    def _filter_and_sort_prescriptions(self):
         if not self.all_users:
             if self.connection_status:
                 # Server reachable, but no users in DB
