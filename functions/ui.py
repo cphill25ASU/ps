@@ -1,6 +1,6 @@
 from kivy.config import Config
 from kivy.app import App
-Config.set('graphics', 'fullscreen', 'auto')
+Config.set('graphics', 'fullscreen', 'auto')  # or '1' instead of 'auto'
 Config.set('graphics', 'borderless', '1')
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
@@ -365,15 +365,14 @@ class DispenserApp(App):
 
     def _details_touch_down(self, instance, touch):
         if instance.collide_point(*touch.pos):
-            Clock.unschedule(self.show_dev_menu)
-            self.dev_menu_event = Clock.schedule_once(self.show_dev_menu, 2)
+            self.dev_menu_event = Clock.schedule_once(self.show_dev_menu, 10)
 
     def _details_touch_up(self, instance, touch):
         if instance.collide_point(*touch.pos):
-           Clock.unschedule(self.show_dev_menu)
-        self.dev_menu_event = None
-            # Treat this as a normal tap → open details
-        self.show_details(instance)
+            if self.dev_menu_event:
+                self.dev_menu_event.cancel()
+                self.dev_menu_event = None
+                self.show_details(instance)
 
     def show_dev_menu(self, dt):
         self.dev_menu_event = None
