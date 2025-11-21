@@ -371,9 +371,9 @@ class DispenserApp(App):
     def _details_touch_up(self, instance, touch):
         if instance.collide_point(*touch.pos):
            Clock.unschedule(self.show_dev_menu)
-            self.dev_menu_event = None
+        self.dev_menu_event = None
             # Treat this as a normal tap → open details
-            self.show_details(instance)
+        self.show_details(instance)
 
     def show_dev_menu(self, dt):
         self.dev_menu_event = None
